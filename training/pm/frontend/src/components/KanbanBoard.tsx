@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -8,15 +8,39 @@ import {
   useSensor,
   useSensors,
   closestCorners,
+  pointerWithin,
+  rectIntersection,
+  MeasuringStrategy,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
+import { createId, moveCard, type BoardData, type Column } from "@/lib/kanban";
 
-export const KanbanBoard = () => {
-  const [board, setBoard] = useState<BoardData>(() => initialData);
+type KanbanBoardProps = {
+  board: BoardData;
+  onBoardChange: React.Dispatch<React.SetStateAction<BoardData>>;
+  onLogout?: () => void;
+  onRenameColumn?: (columnId: string, title: string) => void;
+  onAddCard?: (columnId: string, title: string, details: string) => void;
+  onDeleteCard?: (columnId: string, cardId: string) => void;
+  onMoveCard?: (activeId: string, overId: string, nextColumns: Column[]) => void;
+  sidebar?: ReactNode;
+};
+
+export const KanbanBoard = ({
+  board,
+  onBoardChange,
+  onLogout,
+  onRenameColumn,
+  onAddCard,
+  onDeleteCard,
+  onMoveCard,
+  sidebar,
+}: KanbanBoardProps) => {
+  const setBoard = onBoardChange;
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
 
   const sensors = useSensors(
@@ -26,23 +50,83 @@ export const KanbanBoard = () => {
   );
 
   const cardsById = useMemo(() => board.cards, [board.cards]);
+  const lastOverId = useRef<string | null>(null);
+
+  const collisionDetection: CollisionDetection = useMemo(
+    () => (args) => {
+      const filtered = {
+        ...args,
+        droppableContainers: args.droppableContainers.filter(
+          (container) => container.id !== args.active.id
+        ),
+      };
+      const pointerCollisions = pointerWithin(filtered);
+      if (pointerCollisions.length > 0) {
+        return pointerCollisions;
+      }
+      const intersections = rectIntersection(filtered);
+      if (intersections.length > 0) {
+        return intersections;
+      }
+      return closestCorners(filtered);
+    },
+    []
+  );
 
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveCardId(event.active.id as string);
+    const activeId = event.active.data.current?.cardId as string | undefined;
+    if (!activeId) {
+      return;
+    }
+    setActiveCardId(activeId);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveCardId(null);
 
-    if (!over || active.id === over.id) {
+    const activeId = active.data.current?.cardId as string | undefined;
+    const activeColumnId = active.data.current?.columnId as string | undefined;
+    const overIdFromData = over?.data.current?.cardId as string | undefined;
+    const overColumnFromData = over?.data.current?.columnId as string | undefined;
+    const isCrossColumn =
+      activeColumnId && overColumnFromData && activeColumnId !== overColumnFromData;
+    const resolvedOverId =
+      (overIdFromData && overIdFromData !== activeId && !isCrossColumn
+        ? overIdFromData
+        : undefined) ??
+      overColumnFromData ??
+      lastOverId.current;
+    if (!activeId || !resolvedOverId || activeId === resolvedOverId) {
+      lastOverId.current = null;
       return;
     }
 
-    setBoard((prev) => ({
-      ...prev,
-      columns: moveCard(prev.columns, active.id as string, over.id as string),
-    }));
+    const overId = resolvedOverId;
+
+    setBoard((prev) => {
+      const nextColumns = moveCard(prev.columns, activeId, overId);
+      onMoveCard?.(activeId, overId, nextColumns);
+      return {
+        ...prev,
+        columns: nextColumns,
+      };
+    });
+
+    lastOverId.current = null;
+  };
+
+  const handleDragOver = (event: { active: DragEndEvent["active"]; over: DragEndEvent["over"] }) => {
+    if (event.over) {
+      const activeColumnId = event.active.data.current?.columnId as string | undefined;
+      const overCardId = event.over.data.current?.cardId as string | undefined;
+      const overColumnId = event.over.data.current?.columnId as string | undefined;
+      if (activeColumnId && overColumnId && activeColumnId !== overColumnId) {
+        lastOverId.current = overColumnId;
+        return;
+      }
+      lastOverId.current = overCardId ?? overColumnId ?? null;
+    }
   };
 
   const handleRenameColumn = (columnId: string, title: string) => {
@@ -52,9 +136,14 @@ export const KanbanBoard = () => {
         column.id === columnId ? { ...column, title } : column
       ),
     }));
+    onRenameColumn?.(columnId, title);
   };
 
   const handleAddCard = (columnId: string, title: string, details: string) => {
+    if (onAddCard) {
+      onAddCard(columnId, title, details);
+      return;
+    }
     const id = createId("card");
     setBoard((prev) => ({
       ...prev,
@@ -80,13 +169,14 @@ export const KanbanBoard = () => {
         columns: prev.columns.map((column) =>
           column.id === columnId
             ? {
-                ...column,
-                cardIds: column.cardIds.filter((id) => id !== cardId),
-              }
+              ...column,
+              cardIds: column.cardIds.filter((id) => id !== cardId),
+            }
             : column
         ),
       };
     });
+    onDeleteCard?.(columnId, cardId);
   };
 
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
@@ -111,13 +201,24 @@ export const KanbanBoard = () => {
                 and capture quick notes without getting buried in settings.
               </p>
             </div>
-            <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-                Focus
-              </p>
-              <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
-                One board. Five columns. Zero clutter.
-              </p>
+            <div className="flex flex-col items-start gap-3">
+              {onLogout ? (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)] transition hover:border-[var(--primary-blue)]"
+                >
+                  Log out
+                </button>
+              ) : null}
+              <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
+                  Focus
+                </p>
+                <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
+                  One board. Five columns. Zero clutter.
+                </p>
+              </div>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-4">
@@ -133,32 +234,41 @@ export const KanbanBoard = () => {
           </div>
         </header>
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <section className="grid gap-6 lg:grid-cols-5">
-            {board.columns.map((column) => (
-              <KanbanColumn
-                key={column.id}
-                column={column}
-                cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                onRename={handleRenameColumn}
-                onAddCard={handleAddCard}
-                onDeleteCard={handleDeleteCard}
-              />
-            ))}
-          </section>
-          <DragOverlay>
-            {activeCard ? (
-              <div className="w-[260px]">
-                <KanbanCardPreview card={activeCard} />
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+        <div className={sidebar ? "grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]" : ""}>
+          <DndContext
+            sensors={sensors}
+            measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+            collisionDetection={collisionDetection}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+          >
+            <section className="grid gap-6 lg:grid-cols-5">
+              {board.columns.map((column) => (
+                <KanbanColumn
+                  key={column.id}
+                  column={column}
+                  cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                  onRename={handleRenameColumn}
+                  onAddCard={handleAddCard}
+                  onDeleteCard={handleDeleteCard}
+                />
+              ))}
+            </section>
+            <DragOverlay>
+              {activeCard ? (
+                <div className="w-[260px]">
+                  <KanbanCardPreview card={activeCard} />
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+          {sidebar ? (
+            <div className="lg:sticky lg:top-10 lg:self-start">
+              {sidebar}
+            </div>
+          ) : null}
+        </div>
       </main>
     </div>
   );

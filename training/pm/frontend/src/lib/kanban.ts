@@ -15,6 +15,16 @@ export type BoardData = {
   cards: Record<string, Card>;
 };
 
+const ensurePrefix = (value: string | number, prefix: string) => {
+  const stringValue = String(value);
+  return stringValue.startsWith(prefix) ? stringValue : `${prefix}${stringValue}`;
+};
+
+export const toColumnId = (value: string | number) => ensurePrefix(value, "col-");
+export const toCardId = (value: string | number) => ensurePrefix(value, "card-");
+export const fromColumnId = (value: string) => value.replace(/^col-/, "");
+export const fromCardId = (value: string) => value.replace(/^card-/, "");
+
 export const initialData: BoardData = {
   columns: [
     { id: "col-backlog", title: "Backlog", cardIds: ["card-1", "card-2"] },
@@ -165,4 +175,15 @@ export const createId = (prefix: string) => {
   const randomPart = Math.random().toString(36).slice(2, 8);
   const timePart = Date.now().toString(36);
   return `${prefix}-${randomPart}${timePart}`;
+};
+
+export const findCardLocation = (columns: Column[], cardId: string) => {
+  const column = columns.find((item) => item.cardIds.includes(cardId));
+  if (!column) {
+    return null;
+  }
+  return {
+    columnId: column.id,
+    index: column.cardIds.indexOf(cardId),
+  };
 };
