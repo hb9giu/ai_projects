@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.database import init_db
 import app.ai as ai_module
+from tests.conftest import TEST_API_KEY
 
 
 class _DummyResponse:
@@ -55,7 +56,7 @@ def test_chat_applies_actions(monkeypatch, tmp_path: Path) -> None:
     def _mock_post(*_args, **_kwargs):
         return _DummyResponse(response_content)
 
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", TEST_API_KEY)
     monkeypatch.setattr(ai_module.httpx, "post", _mock_post)
 
     response = client.post("/api/chat", json={"message": "Add a card."})

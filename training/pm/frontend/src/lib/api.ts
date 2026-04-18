@@ -16,10 +16,11 @@ export type ChatMessage = {
     content: string;
 };
 
-type ChatAction = {
-    type: "create_card" | "update_card" | "move_card" | "delete_card";
-    [key: string]: unknown;
-};
+type CreateCardAction = { type: "create_card"; columnId: string; title: string; details: string; position?: number | null };
+type UpdateCardAction = { type: "update_card"; cardId: string; title?: string | null; details?: string | null };
+type MoveCardAction = { type: "move_card"; cardId: string; columnId: string; position?: number | null };
+type DeleteCardAction = { type: "delete_card"; cardId: string };
+type ChatAction = CreateCardAction | UpdateCardAction | MoveCardAction | DeleteCardAction;
 
 type ChatResponse = {
     response: string;

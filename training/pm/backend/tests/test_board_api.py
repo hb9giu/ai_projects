@@ -69,6 +69,47 @@ def test_create_move_and_delete_card(tmp_path: Path) -> None:
     assert card_id not in final["cards"]
 
 
+def test_update_column_not_found(tmp_path: Path) -> None:
+    client = _make_client(tmp_path)
+    response = client.patch("/api/columns/999999", json={"title": "Ghost"})
+    assert response.status_code == 404
+
+
+def test_delete_column_not_found(tmp_path: Path) -> None:
+    client = _make_client(tmp_path)
+    response = client.delete("/api/columns/999999")
+    assert response.status_code == 404
+
+
+def test_create_card_invalid_column(tmp_path: Path) -> None:
+    client = _make_client(tmp_path)
+    response = client.post("/api/cards", json={"column_id": 999999, "title": "Ghost", "details": ""})
+    assert response.status_code == 404
+
+
+def test_update_card_not_found(tmp_path: Path) -> None:
+    client = _make_client(tmp_path)
+    response = client.patch("/api/cards/999999", json={"title": "Ghost"})
+    assert response.status_code == 404
+
+
+def test_delete_card_not_found(tmp_path: Path) -> None:
+    client = _make_client(tmp_path)
+    response = client.delete("/api/cards/999999")
+    assert response.status_code == 404
+
+
+def test_create_card_invalid_position(tmp_path: Path) -> None:
+    client = _make_client(tmp_path)
+    board = client.get("/api/board").json()
+    column_id = int(board["columns"][0]["id"])
+    response = client.post(
+        "/api/cards",
+        json={"column_id": column_id, "title": "Bad pos", "details": "", "position": -1},
+    )
+    assert response.status_code == 422
+
+
 def test_delete_column_removes_cards(tmp_path: Path) -> None:
     client = _make_client(tmp_path)
     board = client.get("/api/board").json()

@@ -11,6 +11,9 @@ def get_db() -> Generator[sqlite3.Connection, None, None]:
     conn = connect_db()
     try:
         yield conn
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 

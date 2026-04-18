@@ -53,21 +53,22 @@ export const ChatSidebar = ({
           </p>
         ) : (
           messages.map((message, index) => (
-            <div
+            <article
               key={`${message.role}-${index}`}
+              aria-label={message.role === "user" ? "You" : "Assistant"}
               className={
                 message.role === "user"
                   ? "self-end rounded-2xl bg-[var(--primary-blue)] px-4 py-3 text-sm text-white"
                   : "self-start rounded-2xl border border-[var(--stroke)] bg-white px-4 py-3 text-sm text-[var(--navy-dark)]"
               }
             >
-              <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/70">
+              <p className={`text-[10px] font-semibold uppercase tracking-[0.25em] ${message.role === "user" ? "text-white/70" : "text-[var(--gray-text)]"}`}>
                 {message.role === "user" ? "You" : "Assistant"}
               </p>
               <p className={message.role === "user" ? "mt-2 text-white" : "mt-2 text-[var(--navy-dark)]"}>
                 {message.content}
               </p>
-            </div>
+            </article>
           ))
         )}
       </div>

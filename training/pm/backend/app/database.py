@@ -186,17 +186,22 @@ def ordered_ids(rows: Iterable[sqlite3.Row]) -> list[int]:
     return [int(row["id"]) for row in rows]
 
 
+VALID_WHERE_COLUMNS = {"column_id", "board_id"}
+
+
 def resequence_positions(
     conn: sqlite3.Connection,
     table: Literal["cards", "columns"],
     ids: list[int],
-    extra_where: str,
-    extra_params: tuple,
+    where_column: Literal["column_id", "board_id"],
+    where_value: int,
 ) -> None:
     if table not in VALID_TABLES:
         raise ValueError(f"Invalid table: {table}")
+    if where_column not in VALID_WHERE_COLUMNS:
+        raise ValueError(f"Invalid where_column: {where_column}")
     for index, item_id in enumerate(ids):
         conn.execute(
-            f"UPDATE {table} SET position = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? {extra_where}",
-            (index, item_id, *extra_params),
+            f"UPDATE {table} SET position = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND {where_column} = ?",
+            (index, item_id, where_value),
         )

@@ -1,11 +1,16 @@
+import logging
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
 from app.database import init_db
 from app.routes import api_router, static_router
 from app.routes.static import get_static_dir
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("pm")
 
 
 @asynccontextmanager
@@ -15,6 +20,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.monotonic()
+    response = await call_next(request)
+    ms = (time.monotonic() - start) * 1000
+    logger.info("%s %s %d %.0fms", request.method, request.url.path, response.status_code, ms)
+    return response
 
 
 def _mount_static_assets(static_dir) -> None:

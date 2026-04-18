@@ -1,4 +1,4 @@
-FROM node:20-slim AS frontend-build
+FROM node:20.18.0-slim AS frontend-build
 
 WORKDIR /app/frontend
 
@@ -8,7 +8,7 @@ RUN npm ci
 COPY frontend /app/frontend
 RUN npm run build
 
-FROM python:3.12-slim
+FROM python:3.12.7-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -32,6 +32,8 @@ RUN useradd -m -u 1000 appuser && \
     chown -R appuser:appuser /app
 
 USER appuser
+
+VOLUME /app/backend/data
 
 EXPOSE 8000
 

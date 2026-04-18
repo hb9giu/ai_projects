@@ -8,6 +8,7 @@ import {
   type SetStateAction,
 } from "react";
 import { ChatSidebar } from "@/components/ChatSidebar";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import {
   fetchBoard,
@@ -33,6 +34,7 @@ export default function Home() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatError, setChatError] = useState<string | null>(null);
   const [isChatSending, setIsChatSending] = useState(false);
+  const [isOperating, setIsOperating] = useState(false);
 
   const refreshBoard = useCallback(async () => {
     setIsLoading(true);
@@ -112,6 +114,7 @@ export default function Home() {
       setBoardError("Unable to add the card.");
       return;
     }
+    setIsOperating(true);
     try {
       await createCard(
         {
@@ -126,6 +129,8 @@ export default function Home() {
       if (process.env.NODE_ENV === "development") console.error(err);
       setBoardError("Unable to add the card.");
       refreshBoard();
+    } finally {
+      setIsOperating(false);
     }
   };
 
@@ -134,6 +139,7 @@ export default function Home() {
     if (Number.isNaN(cardIdNumber)) {
       return;
     }
+    setIsOperating(true);
     try {
       await deleteCard(cardIdNumber, username);
       refreshBoard();
@@ -141,6 +147,8 @@ export default function Home() {
       if (process.env.NODE_ENV === "development") console.error(err);
       setBoardError("Unable to remove the card.");
       refreshBoard();
+    } finally {
+      setIsOperating(false);
     }
   };
 
@@ -158,6 +166,7 @@ export default function Home() {
     if (Number.isNaN(cardIdNumber) || Number.isNaN(columnIdNumber)) {
       return;
     }
+    setIsOperating(true);
     try {
       await updateCard(
         cardIdNumber,
@@ -172,6 +181,8 @@ export default function Home() {
       if (process.env.NODE_ENV === "development") console.error(err);
       setBoardError("Unable to move the card.");
       refreshBoard();
+    } finally {
+      setIsOperating(false);
     }
   };
 
@@ -200,7 +211,11 @@ export default function Home() {
       };
       setChatMessages((prev) => [...prev, assistantMessage]);
       if (response.board) {
-        setBoard(toBoardData(response.board));
+        try {
+          setBoard(toBoardData(response.board));
+        } catch {
+          refreshBoard();
+        }
       }
     } catch (err) {
       if (process.env.NODE_ENV === "development") console.error(err);
@@ -307,30 +322,34 @@ export default function Home() {
 
   return (
     <div>
-      {boardError ? (
+      {(boardError || isOperating) ? (
         <div className="mx-auto max-w-[1500px] px-6 pt-6">
           <div className="rounded-2xl border border-[var(--stroke)] bg-white/90 px-4 py-3 text-sm text-[var(--secondary-purple)] shadow-[var(--shadow)]">
-            {boardError}
+            {boardError ?? "Saving…"}
           </div>
         </div>
       ) : null}
-      <KanbanBoard
-        board={board}
-        onBoardChange={handleBoardChange}
-        onLogout={handleLogout}
-        onRenameColumn={handleRenameColumn}
-        onAddCard={handleAddCard}
-        onDeleteCard={handleDeleteCard}
-        onMoveCard={handleMoveCard}
-        sidebar={(
-          <ChatSidebar
-            messages={chatMessages}
-            onSend={handleSendChat}
-            isSending={isChatSending}
-            error={chatError}
-          />
-        )}
-      />
+      <ErrorBoundary>
+        <KanbanBoard
+          board={board}
+          onBoardChange={handleBoardChange}
+          onLogout={handleLogout}
+          onRenameColumn={handleRenameColumn}
+          onAddCard={handleAddCard}
+          onDeleteCard={handleDeleteCard}
+          onMoveCard={handleMoveCard}
+          sidebar={(
+            <ErrorBoundary>
+              <ChatSidebar
+                messages={chatMessages}
+                onSend={handleSendChat}
+                isSending={isChatSending}
+                error={chatError}
+              />
+            </ErrorBoundary>
+          )}
+        />
+      </ErrorBoundary>
     </div>
   );
 }

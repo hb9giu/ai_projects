@@ -1,4 +1,5 @@
 import json
+import logging
 import sqlite3
 
 import httpx
@@ -21,23 +22,15 @@ from app.models import (
     ChatAction,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def parse_structured_output(content: str) -> StructuredChatOutput:
     try:
         data = json.loads(content)
     except json.JSONDecodeError as exc:
-        trimmed = content.strip()
-        start = trimmed.find("{")
-        end = trimmed.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            try:
-                data = json.loads(trimmed[start : end + 1])
-            except json.JSONDecodeError as inner_exc:
-                raise HTTPException(
-                    status_code=502, detail="OpenRouter returned invalid JSON"
-                ) from inner_exc
-        else:
-            raise HTTPException(status_code=502, detail="OpenRouter returned invalid JSON") from exc
+        logger.warning("OpenRouter returned non-JSON content: %.200s", content)
+        raise HTTPException(status_code=502, detail="OpenRouter returned invalid JSON") from exc
     return StructuredChatOutput.model_validate(data)
 
 
@@ -61,7 +54,7 @@ def call_openrouter(messages: list[dict[str, str]]) -> tuple[str, str | None]:
             f"{OPENROUTER_BASE_URL}/chat/completions",
             json=payload,
             headers=headers,
-            timeout=20,
+            timeout=25,
         )
     except httpx.RequestError as exc:
         raise HTTPException(status_code=502, detail="OpenRouter request failed") from exc
@@ -137,6 +130,7 @@ def apply_actions(
                 (int(action.columnId), board_id),
             ).fetchone()
             if not column:
+                logger.warning("create_card: column %s not found for board %d", action.columnId, board_id)
                 continue
 
             cards = conn.execute(
@@ -157,7 +151,7 @@ def apply_actions(
             )
             card_id = int(cursor.lastrowid)
             ids.insert(insert_position, card_id)
-            resequence_positions(conn, "cards", ids, "AND column_id = ?", (int(action.columnId),))
+            resequence_positions(conn, "cards", ids, "column_id", int(action.columnId))
             continue
 
         if isinstance(action, UpdateCardAction):
@@ -171,6 +165,7 @@ def apply_actions(
                 (int(action.cardId), board_id),
             ).fetchone()
             if not card_row:
+                logger.warning("update_card: card %s not found for board %d", action.cardId, board_id)
                 continue
             if action.title is not None:
                 conn.execute(
@@ -195,6 +190,7 @@ def apply_actions(
                 (int(action.cardId), board_id),
             ).fetchone()
             if not card:
+                logger.warning("move_card: card %s not found for board %d", action.cardId, board_id)
                 continue
 
             target_column = conn.execute(
@@ -202,6 +198,7 @@ def apply_actions(
                 (int(action.columnId), board_id),
             ).fetchone()
             if not target_column:
+                logger.warning("move_card: target column %s not found for board %d", action.columnId, board_id)
                 continue
 
             current_column_id = int(card["column_id"])
@@ -233,8 +230,8 @@ def apply_actions(
                 "UPDATE cards SET column_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (target_column_id, int(action.cardId)),
             )
-            resequence_positions(conn, "cards", source_ids, "AND column_id = ?", (current_column_id,))
-            resequence_positions(conn, "cards", target_ids, "AND column_id = ?", (target_column_id,))
+            resequence_positions(conn, "cards", source_ids, "column_id", current_column_id)
+            resequence_positions(conn, "cards", target_ids, "column_id", target_column_id)
             continue
 
         if isinstance(action, DeleteCardAction):
@@ -248,6 +245,7 @@ def apply_actions(
                 (int(action.cardId), board_id),
             ).fetchone()
             if not card:
+                logger.warning("delete_card: card %s not found for board %d", action.cardId, board_id)
                 continue
             column_id = int(card["column_id"])
             conn.execute("DELETE FROM cards WHERE id = ?", (int(action.cardId),))
@@ -255,6 +253,6 @@ def apply_actions(
                 "SELECT id FROM cards WHERE column_id = ? AND archived = 0 ORDER BY position",
                 (column_id,),
             ).fetchall()
-            resequence_positions(conn, "cards", ordered_ids(remaining), "AND column_id = ?", (column_id,))
+            resequence_positions(conn, "cards", ordered_ids(remaining), "column_id", column_id)
 
     conn.commit()

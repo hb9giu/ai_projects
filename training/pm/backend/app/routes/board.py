@@ -42,8 +42,6 @@ def create_column(
     insert_position = payload.position
     if insert_position is None or insert_position > len(ids):
         insert_position = len(ids)
-    if insert_position < 0:
-        insert_position = 0
 
     cursor = conn.execute(
         "INSERT INTO columns (board_id, title, position) VALUES (?, ?, ?)",
@@ -51,7 +49,7 @@ def create_column(
     )
     column_id = int(cursor.lastrowid)
     ids.insert(insert_position, column_id)
-    resequence_positions(conn, "columns", ids, "AND board_id = ?", (board_id,))
+    resequence_positions(conn, "columns", ids, "board_id", board_id)
     conn.commit()
 
     return {"id": str(column_id)}
@@ -90,7 +88,7 @@ def update_column(
             ids.remove(column_id)
         insert_position = max(0, min(payload.position, len(ids)))
         ids.insert(insert_position, column_id)
-        resequence_positions(conn, "columns", ids, "AND board_id = ?", (board_id,))
+        resequence_positions(conn, "columns", ids, "board_id", board_id)
 
     conn.commit()
     return {"status": "ok"}
@@ -119,7 +117,7 @@ def delete_column(
         "SELECT id FROM columns WHERE board_id = ? ORDER BY position",
         (board_id,),
     ).fetchall()
-    resequence_positions(conn, "columns", ordered_ids(remaining), "AND board_id = ?", (board_id,))
+    resequence_positions(conn, "columns", ordered_ids(remaining), "board_id", board_id)
     conn.commit()
 
     return {"status": "ok"}
@@ -150,8 +148,6 @@ def create_card(
     insert_position = payload.position
     if insert_position is None or insert_position > len(ids):
         insert_position = len(ids)
-    if insert_position < 0:
-        insert_position = 0
 
     cursor = conn.execute(
         "INSERT INTO cards (column_id, title, details, position) VALUES (?, ?, ?, ?)",
@@ -159,7 +155,7 @@ def create_card(
     )
     card_id = int(cursor.lastrowid)
     ids.insert(insert_position, card_id)
-    resequence_positions(conn, "cards", ids, "AND column_id = ?", (payload.column_id,))
+    resequence_positions(conn, "cards", ids, "column_id", payload.column_id)
     conn.commit()
 
     return {"id": str(card_id)}
@@ -236,8 +232,8 @@ def update_card(
             "UPDATE cards SET column_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (target_column_id, card_id),
         )
-        resequence_positions(conn, "cards", source_ids, "AND column_id = ?", (current_column_id,))
-        resequence_positions(conn, "cards", target_ids, "AND column_id = ?", (target_column_id,))
+        resequence_positions(conn, "cards", source_ids, "column_id", current_column_id)
+        resequence_positions(conn, "cards", target_ids, "column_id", target_column_id)
 
     conn.commit()
     return {"status": "ok"}
@@ -270,6 +266,6 @@ def delete_card(
         "SELECT id FROM cards WHERE column_id = ? AND archived = 0 ORDER BY position",
         (column_id,),
     ).fetchall()
-    resequence_positions(conn, "cards", ordered_ids(remaining), "AND column_id = ?", (column_id,))
+    resequence_positions(conn, "cards", ordered_ids(remaining), "column_id", column_id)
     conn.commit()
     return {"status": "ok"}
