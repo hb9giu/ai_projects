@@ -26,7 +26,7 @@ export const KanbanCard = ({ card, columnId, onDelete }: KanbanCardProps) => {
       ref={setNodeRef}
       style={style}
       className={clsx(
-        "rounded-2xl border border-transparent bg-white px-4 py-4 shadow-[0_12px_24px_rgba(3,33,71,0.08)]",
+        "group rounded-2xl border border-transparent bg-white px-4 py-4 shadow-[0_12px_24px_rgba(3,33,71,0.08)]",
         "transition-all duration-150",
         isDragging && "opacity-60 shadow-[0_18px_32px_rgba(3,33,71,0.16)]"
       )}
@@ -39,17 +39,21 @@ export const KanbanCard = ({ card, columnId, onDelete }: KanbanCardProps) => {
           <h4 className="font-display text-base font-semibold text-[var(--navy-dark)]">
             {card.title}
           </h4>
-          <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">
-            {card.details}
-          </p>
+          {card.details ? (
+            <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">
+              {card.details}
+            </p>
+          ) : null}
         </div>
         <button
           type="button"
-          onClick={() => onDelete(card.id)}
-          className="shrink-0 rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
+          onClick={(e) => { e.stopPropagation(); onDelete(card.id); }}
+          className="shrink-0 rounded-lg p-1 text-[var(--gray-text)] opacity-0 transition group-hover:opacity-100 hover:bg-[var(--surface)] hover:text-red-400"
           aria-label={`Delete ${card.title}`}
         >
-          ✕
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M2 2L11 11M11 2L2 11" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/>
+          </svg>
         </button>
       </div>
     </article>
